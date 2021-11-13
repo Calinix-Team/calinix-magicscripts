@@ -1,0 +1,186 @@
+#     _    ____  
+#    / \  / ___|   Arghya Sarkar
+#   / _ \ \___ \   https://github.com/arghyagod-coder
+#  / ___ \ ___) |  https://github.com/Calinix-Team
+# /_/   \_\____/   https://get.calinix.tech
+#
+# NAME: CalinixOS Magicscript
+# DESC: A Post Installation Script to turn your system to CalinixOS Awesome Desktop
+# WARNING: Run this script at your own risk.
+# DEPENDENCIES: dialog
+
+###########################################################################
+## The script will use sudo. Run this only after examining what it does. ##
+###########################################################################
+
+error() { \
+    clear; printf "ERROR:\\n%s\\n" "$1" >&2; exit 1;
+}
+
+echo "################################################################"
+echo "## Syncing the repos and installing 'dialog' if not installed ##"
+echo "################################################################"
+sudo pacman --noconfirm --needed -Syu dialog || error "Error syncing the repos."
+
+welcome() { \
+    dialog --colors --title "\Z7\ZbInstalling CalinixOS!" --msgbox "\Z4This is a script that will install the CalinixOS interface in your arch install.  It's really just an installation script for those that want to try out the CalinixOS desktop.  We will add necessary repos to Pacman and install the Awesome tiling window manager, the Alacritty terminal, the Fish shell, Nautilus and many other essential programs needed to make my dotfiles work correctly.\\n\\n-Jay (Arghya Sarkar, Lead Developer of Calinix)" 16 60
+
+    dialog --colors --title "\Z7\ZbStay near your computer!" --yes-label "Continue" --no-label "Exit" --yesno "\Z4This script is not allowed to be run as root, but you will be asked to enter your sudo password at various points during this installation. This is to give PACMAN the necessary permissions to install the software.  So stay near the computer." 8 60
+}
+
+welcome || error "User choose to exit."
+
+
+addrepo() { \
+    echo "###########################################################"
+    echo "## Fetching the script for fetching all the repositories ##"
+    echo "###########################################################"
+    #################################################
+    ## Get the Calinix Repositories in your system ##
+    #################################################
+
+    echo "Editing Pacman.conf"
+
+    echo "[calinix]
+    SigLevel = Optional TrustedOnly
+    Server = https://get.calinix.tech/calinix_repo/\$arch" >> /etc/pacman.conf
+
+    echo "The Calinix Repositories were added successfully to your system. \n\n Run pacman -Sy to update the repositories."
+
+    #################################################
+    ## Get the chaotic Repositories in your system ##
+    #################################################
+
+    echo "Fetching the latest Chaotic AUR Repositories"
+
+    echo "Fetching chaotic keys"
+    pacman-key --recv-key 3056513887B78AEB --keyserver keyserver.ubuntu.com
+    pacman-key --lsign-key 3056513887B78AEB
+
+    echo "Getting the latest chaotic mirrorlist"
+
+    pacman -U 'https://cdn-mirror.chaotic.cx/chaotic-aur/chaotic-keyring.pkg.tar.zst' 'https://cdn-mirror.chaotic.cx/chaotic-aur/chaotic-mirrorlist.pkg.tar.zst' --noconfirm
+    cp etc/pacman.d/chaotic-mirrorlist /etc/pacman.d/chaotic-mirrorlist
+
+    echo "Adding chaotic-aur to pacman.conf"
+
+    echo "[chaotic-aur]
+    Include = /etc/pacman.d/chaotic-mirrorlist" >> /etc/pacman.conf
+
+    echo "The chaotic Repositories were added successfully to your system. \n\n Run pacman -Sy to update the repositories."
+
+    sudo pacman -S wget --noconfirm --needed
+
+    echo "Getting the ArcoLinux keys from the ArcoLinux repo"
+
+    sudo wget https://github.com/arcolinux/arcolinux_repo/raw/master/x86_64/arcolinux-keyring-20230919-6-any.pkg.tar.zst -O /tmp/arcolinux-keyring-20230919-6-any.pkg.tar.zst
+    sudo pacman -U --noconfirm --needed /tmp/arcolinux-keyring-20230919-6-any.pkg.tar.zst
+
+    ######################################################################################################################
+
+    echo "Getting the latest arcolinux mirrors file"
+
+    sudo wget https://raw.githubusercontent.com/arcolinux/arcolinux-mirrorlist/master/etc/pacman.d/arcolinux-mirrorlist -O /etc/pacman.d/arcolinux-mirrorlist
+    echo '
+    [arcolinux_repo_3party]
+    SigLevel = Required DatabaseOptional
+    Include = /etc/pacman.d/arcolinux-mirrorlist
+    [arcolinux_repo_xlarge]
+    SigLevel = Required DatabaseOptional
+    Include = /etc/pacman.d/arcolinux-mirrorlist' | sudo tee --append /etc/pacman.conf
+
+}
+
+echo "Making a backup of /etc/skel"
+sudo mv /etc/skel /etc/skel.bak
+sudo mkdir /etc/skel
+
+addrepo || error "Error adding necessary repos to /etc/pacman.conf."
+
+inspkgs(){
+    echo "#######################################"
+    echo "## Installing the necessary Packages ##"
+    echo "#######################################"
+
+    sudo pacman --needed --ask 4 -Sy - < packages.txt
+}
+
+inspkgs || error "Error installing Packages to the repository"
+
+lvimsetup(){
+    echo "#########################"
+    echo "## Installing LunarVim ##"
+    echo "#########################"
+    bash <(curl -s https://raw.githubusercontent.com/lunarvim/lunarvim/master/utils/installer/install.sh)
+
+    echo "LunarVim was installed.
+Enter :LspInstall followed by <TAB> to see your options for LSP
+
+Enter :TSInstall followed by <TAB> to see your options for syntax highlighting"
+
+}
+
+sudo systemctl disable $(grep '/usr/s\?bin' /etc/systemd/system/display-manager.service | awk -F / '{print $NF}') || echo "Cannot disable current display manager."
+sudo systemctl enable sddm
+echo "###################################"
+echo "## Enable sddm as login manager. ##"
+echo "###################################"
+
+git clone https://github.com/Calinix-Team/Calinix-Arch
+sudo cp -r Calinix-Arch/usr/share/sddm/themes/* /usr/share/sddm/themes
+sudo cp /etc/sddm.conf.d/kde_settings.conf /etc/sddm.conf.d/kde_settings.backup
+sudo cp -r Calinix-Arch/etc/sddm.conf.d/* /etc/sddm.conf.d/
+
+echo "#############################"
+echo "## Set Grub Configuration. ##"
+echo "#############################"
+sudo cp /etc/default/grub /etc/default/grub.bak
+sudo cp Calinix-Arch/etc/default/* /etc/default/
+sudo grub-mkconfig -o /boot/grub/grub.cfg
+
+
+PS3='Set default user shell (enter number): '
+shells=("fish" "bash" "zsh" "quit")
+select choice in "${shells[@]}"; do
+    case $choice in
+         fish | bash | zsh)
+            sudo chsh $USER -s "/bin/$choice" && \
+            echo -e "$choice has been set as your default USER shell. \
+                    \nLogging out is required for this take effect."
+            break
+            ;;
+         quit)
+            echo "User quit without changing shell."
+            break
+            ;;
+         *)
+            echo "invalid option $REPLY"
+            ;;
+    esac
+done
+
+cp ~/.bashrc ~/.bashrc.bak 
+cp Calinix-Arch/etc/skel/.bashrc ~/.bashrc
+
+sudo cp /etc/skel
+
+echo "#################################################"
+echo "## Copying contents from /etc/skel/ to ${HOME} ##"
+echo "#################################################"
+
+cp -Rf ~/.config ~/.config-backup-$(date +%Y.%m.%d-%H.%M.%S) && cp -rf /etc/skel/* ~
+
+echo "#####################################"
+echo "## CalinixOS Desktop was installed ##"
+echo "#####################################"
+
+while true; do
+    read -p "Do you want to reboot now? (recommended) [Y/n] " yn
+    case $yn in
+        [Yy]* ) reboot;;
+        [Nn]* ) break;;
+        "" ) reboot;;
+        * ) echo "Please answer yes or no.";;
+    esac
+done
+
