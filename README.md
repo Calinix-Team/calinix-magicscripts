@@ -9,5 +9,5 @@ To install CalinixOS Desktop in your computer, you need to clone this repository
 ```bash
 git clone https://github.com/Calinix-Arch/calinix-magicscripts
 cd calinix-magicscripts/
-./dtos
+bash magicscript.sh
 ```
